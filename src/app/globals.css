@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+@theme {
+  --color-soft-snow: #F6F6F6;
+  --color-sunset-amber: #E59136;
+  --color-charcoal-black: #131415;
+  --color-graphite-gray: #34373A;
+  
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+
+:root {
+  --background: #F6F6F6; /* Soft Snow */
+  --foreground: #131415; /* Charcoal Black */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #131415; /* Charcoal Black */
+    --foreground: #F6F6F6; /* Soft Snow */
+  }
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
