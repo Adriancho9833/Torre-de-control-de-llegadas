@@ -413,8 +413,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
                       ${isCurrentMonth ? 'bg-white' : 'bg-gray-50/70 text-gray-400'}
                       ${hasHighlight ? 'bg-amber-50 hover:bg-amber-100/70' : 'hover:bg-gray-50'}
                       ${isInventoryCritical ? 'shadow-[inset_0_0_0_2px_#ef4444]' : ''}
-                      ${isInventoryTight && !isInventoryCritical ? 'shadow-[inset_0_0_0_2px_#fbbf24]' : ''}
-                      ${isDischargeOverflow && !isInventoryCritical && !isInventoryTight ? 'shadow-[inset_0_0_0_2px_#f97316]' : ''}
+                      ${isDischargeOverflow && !isInventoryCritical ? 'shadow-[inset_0_0_0_2px_#f97316]' : ''}
                     `}
                   >
                     <div className="flex justify-between items-start mb-1">
@@ -424,9 +423,6 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
                       <div className="flex gap-0.5">
                         {isInventoryCritical && (
                           <div title="Saturación Crítica (<2)"><AlertTriangle size={13} className="text-red-500" /></div>
-                        )}
-                        {isInventoryTight && (
-                          <div title="Espacio un poco justo (2-5)"><AlertTriangle size={13} className="text-amber-500" /></div>
                         )}
                         {isDischargeOverflow && (
                           <div title="Capacidad de descargue excedida"><AlertTriangle size={13} className="text-orange-500" /></div>
