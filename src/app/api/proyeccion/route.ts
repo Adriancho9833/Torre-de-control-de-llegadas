@@ -92,7 +92,7 @@ export async function GET(request: Request) {
       config: { capacidadTotal, consumoDiario },
       inventarioBase,
       proyeccion,
-      saturadoEn: proyeccion.findIndex(p => p.positions < 7),
+      saturadoEn: proyeccion.findIndex(p => p.positions < 2),
       depositos: depositosFiltrados // send deposit details to frontend
     });
 

@@ -21,7 +21,7 @@ export function AutonomyIndicator({ daysRemaining, isLoading }: { daysRemaining?
         </div>
       </div>
       <p className="text-sm mt-3 opacity-90 font-medium">
-         {isCritical ? "Cuidado: Tendremos menos de 7 espacios disponibles pronto." : "Sin riesgo de reducir a menos de 7 espacios (~25 días)."}
+         {isCritical ? `Cuidado: Tendremos menos de 2 espacios disponibles en ${daysRemaining} días.` : "Sin riesgo inminente de saturación crítica (~25 días)."}
       </p>
     </div>
   );

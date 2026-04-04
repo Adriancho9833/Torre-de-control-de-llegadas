@@ -13,7 +13,8 @@ export function HeroStats({
   filterLabel?: string;
 }) {
   const isNegative = typeof availablePositions === "number" && availablePositions < 0;
-  const isCritical = typeof availablePositions === "number" && availablePositions < 7;
+  const isCritical = typeof availablePositions === "number" && availablePositions <= 1;
+  const isTight = typeof availablePositions === "number" && !isCritical && availablePositions <= 5;
 
   return (
     <div className="bg-graphite-gray text-soft-snow rounded-xl p-6 shadow-lg flex flex-col justify-center relative h-full min-h-[160px] overflow-hidden">
@@ -36,8 +37,8 @@ export function HeroStats({
           <div
             className={`text-7xl font-bold tracking-tighter drop-shadow-sm ${
               isNegative
-                ? "text-red-400"
-                : isCritical
+                ? "text-red-500"
+                : isTight
                 ? "text-orange-400"
                 : "text-sunset-amber"
             }`}
@@ -58,9 +59,19 @@ export function HeroStats({
             ⚠ Inventario excede la capacidad configurada
           </p>
         )}
-        {!isNegative && isCritical && (
+        {isCritical && !isNegative && (
+          <p className="text-xs font-bold text-red-400">
+            ⚠ Críticos (1 o menos disponibles)
+          </p>
+        )}
+        {isTight && (
           <p className="text-xs font-bold text-orange-300">
-            ⚠ Menos de 7 espacios disponibles
+            ⚠ Un poco justos (2 a 5 disponibles)
+          </p>
+        )}
+        {!isNegative && !isCritical && !isTight && (
+          <p className="text-xs font-bold text-green-400">
+            ✓ Holgados (Más de 5 disponibles)
           </p>
         )}
       </div>
