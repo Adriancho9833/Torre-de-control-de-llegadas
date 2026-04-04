@@ -207,7 +207,8 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
   const today = new Date();
 
   const columnProjections = useMemo(() => {
-    const proj: Record<string, boolean> = {};
+    // proj: { [dateStr]: 'CRITICAL' | 'TIGHT' | 'OK' }
+    const proj: Record<string, 'CRITICAL' | 'TIGHT' | 'OK'> = {};
     let runningInv = inventarioBase;
     const flatDays = rows.flat();
     flatDays.forEach(d => {
@@ -220,7 +221,15 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
         runningInv = inventarioBase;
       }
       if (runningInv < 0) runningInv = 0;
-      proj[ds] = (capacidadTotal - runningInv) < 0;
+      
+      const available = capacidadTotal - runningInv;
+      if (available < 2) {
+        proj[ds] = 'CRITICAL';
+      } else if (available <= 5) {
+        proj[ds] = 'TIGHT';
+      } else {
+        proj[ds] = 'OK';
+      }
     });
     return proj;
   }, [dailyTotals, rows, inventarioBase, capacidadTotal, consumoDiario, today]);
@@ -390,7 +399,9 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
                 });
 
                 const hasHighlight = searchImpo.length > 1 && dayArrivals.some(a => a.impo.toLowerCase().includes(searchImpo.toLowerCase()));
-                const isInventoryOverflow = columnProjections[dateStr];
+                const projState = columnProjections[dateStr];
+                const isInventoryCritical = projState === 'CRITICAL';
+                const isInventoryTight = projState === 'TIGHT';
                 const isDischargeOverflow = dischargeOverflowDates.has(dateStr);
 
                 return (
@@ -401,8 +412,9 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
                       min-h-[120px] max-h-[160px] border-r border-b p-2 cursor-pointer transition flex flex-col gap-1 relative group
                       ${isCurrentMonth ? 'bg-white' : 'bg-gray-50/70 text-gray-400'}
                       ${hasHighlight ? 'bg-amber-50 hover:bg-amber-100/70' : 'hover:bg-gray-50'}
-                      ${isInventoryOverflow ? 'shadow-[inset_0_0_0_2px_#ef4444]' : ''}
-                      ${isDischargeOverflow && !isInventoryOverflow ? 'shadow-[inset_0_0_0_2px_#f97316]' : ''}
+                      ${isInventoryCritical ? 'shadow-[inset_0_0_0_2px_#ef4444]' : ''}
+                      ${isInventoryTight && !isInventoryCritical ? 'shadow-[inset_0_0_0_2px_#fbbf24]' : ''}
+                      ${isDischargeOverflow && !isInventoryCritical && !isInventoryTight ? 'shadow-[inset_0_0_0_2px_#f97316]' : ''}
                     `}
                   >
                     <div className="flex justify-between items-start mb-1">
@@ -410,8 +422,11 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
                         {format(day, 'd')}
                       </span>
                       <div className="flex gap-0.5">
-                        {isInventoryOverflow && (
-                          <div title="Saturación de Inventario"><AlertTriangle size={13} className="text-red-500" /></div>
+                        {isInventoryCritical && (
+                          <div title="Saturación Crítica (<2)"><AlertTriangle size={13} className="text-red-500" /></div>
+                        )}
+                        {isInventoryTight && (
+                          <div title="Espacio un poco justo (2-5)"><AlertTriangle size={13} className="text-amber-500" /></div>
                         )}
                         {isDischargeOverflow && (
                           <div title="Capacidad de descargue excedida"><AlertTriangle size={13} className="text-orange-500" /></div>
