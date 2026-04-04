@@ -1,55 +1,78 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-export async function GET() {
+// GET: Obtener modelos y destinos de capacidad (ahora con cap, consumo e inventario por depósito)
+export async function GET(request: Request) {
   try {
-    const { data, error } = await supabase
-      .from('configuracion')
-      .select('*')
-      .limit(1)
-      .single();
+    const { searchParams } = new URL(request.url);
+    const sede = searchParams.get('sede') || 'ANTIOQUIA';
 
-    if (error) {
-      if (error.code === 'PGRST116') { // Not found
-        return NextResponse.json({ capacidad_total: 41, consumo_base_diario: 4 });
-      }
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    const [modelosRes, destinosRes] = await Promise.all([
+      supabase.from('modelos_coeficientes').select('*').order('modelo', { ascending: true }),
+      supabase.from('destinos_capacidad').select('*').eq('sede', sede).order('destino', { ascending: true }),
+    ]);
 
-    return NextResponse.json(data);
+    if (modelosRes.error) throw modelosRes.error;
+    if (destinosRes.error) throw destinosRes.error;
+
+    return NextResponse.json({
+      modelos: modelosRes.data,
+      destinos: destinosRes.data,
+    });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
 
+// PUT: Guardar cambios en modelos y destinos (incluyendo cap, consumo e inventario)
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { consumo_base_diario } = body;
+    const { modelos, destinos } = body;
 
-    if (typeof consumo_base_diario !== 'number') {
-      return NextResponse.json({ error: 'Falta consumo_base_diario' }, { status: 400 });
-    }
+    const results: any = {};
 
-    const { data: configRows } = await supabase.from('configuracion').select('id').limit(1);
-
-    if (!configRows || configRows.length === 0) {
+    if (modelos && Array.isArray(modelos)) {
       const { data, error } = await supabase
-        .from('configuracion')
-        .insert([{ capacidad_total: 41, consumo_base_diario }])
+        .from('modelos_coeficientes')
+        .upsert(modelos, { onConflict: 'id' })
         .select();
       if (error) throw error;
-      return NextResponse.json(data[0]);
-    } else {
-      const id = configRows[0].id;
+      results.modelos = data;
+    }
+
+    if (destinos && Array.isArray(destinos)) {
       const { data, error } = await supabase
-        .from('configuracion')
-        .update({ consumo_base_diario })
-        .eq('id', id)
+        .from('destinos_capacidad')
+        .upsert(destinos, { onConflict: 'id' })
         .select();
       if (error) throw error;
-      return NextResponse.json(data[0]);
+      results.destinos = data;
     }
+
+    return NextResponse.json({ success: true, ...results });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+// DELETE: Eliminar un modelo por ID
+export async function DELETE(request: Request) {
+  try {
+    const body = await request.json();
+    const { modeloId } = body;
+
+    if (!modeloId) {
+      return NextResponse.json({ error: 'modeloId requerido' }, { status: 400 });
+    }
+
+    const { error } = await supabase
+      .from('modelos_coeficientes')
+      .delete()
+      .eq('id', modeloId);
+
+    if (error) throw error;
+    return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

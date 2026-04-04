@@ -1,37 +1,55 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { addDays, format, differenceInDays } from 'date-fns';
+import { addDays, format } from 'date-fns';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    // 1. Obtener configuración
-    const { data: configRow } = await supabase.from('configuracion').select('*').limit(1).single();
-    const capacidadTotal = configRow?.capacidad_total || 41;
-    const consumoDiario = configRow?.consumo_base_diario || 4;
+    const { searchParams } = new URL(request.url);
+    const sede = searchParams.get('sede') || 'ANTIOQUIA';
+    const destino = searchParams.get('destino') || 'ALL'; // 'ALL' or specific deposit name
 
-    // 2. Obtener último inventario real
-    const { data: inventarioRows } = await supabase
-      .from('registro_ocupacion')
+    // 1. Get all deposit configurations for this sede
+    const { data: depositosConfig, error: configError } = await supabase
+      .from('destinos_capacidad')
       .select('*')
-      .order('fecha', { ascending: false })
-      .limit(1);
-    
-    let inventarioBase = 0;
-    let fechaBase = new Date(); // Hoy
+      .eq('sede', sede);
 
-    if (inventarioRows && inventarioRows.length > 0) {
-      inventarioBase = inventarioRows[0].cantidad_fisica_real;
-      fechaBase = new Date(inventarioRows[0].fecha + 'T12:00:00Z'); // Evitar timezone bugs
+    if (configError) throw configError;
+    if (!depositosConfig || depositosConfig.length === 0) {
+      return NextResponse.json({ error: 'No hay configuración de depósitos para esta sede.' }, { status: 404 });
     }
 
-    // 3. Obtener arribos desde la tabla de calendario
-    const fechaInicioStr = format(fechaBase, 'yyyy-MM-dd');
-    const { data: arribos } = await supabase
+    // Filter to relevant deposits
+    const depositosFiltrados = destino === 'ALL'
+      ? depositosConfig
+      : depositosConfig.filter(d => d.destino.toUpperCase() === destino.toUpperCase());
+
+    if (depositosFiltrados.length === 0) {
+      return NextResponse.json({ error: `Depósito '${destino}' no encontrado.` }, { status: 404 });
+    }
+
+    // Aggregate config values (for ALL: sum capacities, sum consumos, sum inventarios)
+    const capacidadTotal = depositosFiltrados.reduce((sum, d) => sum + (d.capacidad_total || 0), 0);
+    const consumoDiario = depositosFiltrados.reduce((sum, d) => sum + (d.consumo_base_diario || 0), 0);
+    const inventarioBase = depositosFiltrados.reduce((sum, d) => sum + (d.inventario_actual || 0), 0);
+
+    // 2. Get arrivals from calendar for reach date, filtered by sede (and destino if not ALL)
+    const HOY = new Date();
+    const fechaInicioStr = format(HOY, 'yyyy-MM-dd');
+
+    let arrivalsQuery = supabase
       .from('arribos_calendario')
-      .select('fecha_eta, cantidad')
+      .select('fecha_eta, cantidad, destino')
+      .eq('sede', sede)
       .gte('fecha_eta', fechaInicioStr);
 
-    // Agrupar arribos por fecha
+    if (destino !== 'ALL') {
+      arrivalsQuery = arrivalsQuery.ilike('destino', destino);
+    }
+
+    const { data: arribos } = await arrivalsQuery;
+
+    // Group arrivals by date
     const arriboPorFecha: Record<string, number> = {};
     if (arribos) {
       arribos.forEach(row => {
@@ -40,47 +58,42 @@ export async function GET() {
       });
     }
 
-    // 4. Calcular proyección (Hoy + 25 días)
+    // 3. Calculate 25-day projection
     const proyeccion = [];
-    const HOY = new Date();
-    
     let inventarioAcumulado = inventarioBase;
-    
+
     for (let i = 0; i < 25; i++) {
-        const currentDate = addDays(HOY, i);
-        const dateStr = format(currentDate, 'yyyy-MM-dd');
-        
-        // El consumo aplica desde el día 1 en delante o día actual si es diferente a la fecha base.
-        // Simularemos un cálculo directo por iteración:
-        // Nuevo Inventario = Inventario Anterior + Arribos Hoy - Consumo Diario
-        const arribosDia = arriboPorFecha[dateStr] || 0;
-        
-        if (i > 0) {
-            inventarioAcumulado = inventarioAcumulado + arribosDia - consumoDiario;
-        } else {
-            // El inventario base ya contiene su estado, solo sumamos arrivos no contemplados de hoy si aplicara, 
-            // pero para simplificar, el día 0 es el base.
-            inventarioAcumulado = inventarioBase;
-        }
+      const currentDate = addDays(HOY, i);
+      const dateStr = format(currentDate, 'yyyy-MM-dd');
+      const arribosDia = arriboPorFecha[dateStr] || 0;
 
-        if(inventarioAcumulado < 0) inventarioAcumulado = 0; // No podemos tener inventario negativo
+      if (i > 0) {
+        inventarioAcumulado = inventarioAcumulado + arribosDia - consumoDiario;
+      } else {
+        // Day 0: start from current real inventory
+        inventarioAcumulado = inventarioBase;
+      }
 
-        const ubicacionesDisponibles = capacidadTotal - inventarioAcumulado;
+      if (inventarioAcumulado < 0) inventarioAcumulado = 0;
+      if (inventarioAcumulado > capacidadTotal) inventarioAcumulado = capacidadTotal;
 
-        proyeccion.push({
-            date: format(currentDate, 'dd/MM'),
-            fullDate: dateStr,
-            positions: ubicacionesDisponibles,
-            inventario: inventarioAcumulado,
-            arribos: arribosDia
-        });
+      const ubicacionesDisponibles = capacidadTotal - inventarioAcumulado;
+
+      proyeccion.push({
+        date: format(currentDate, 'dd/MM'),
+        fullDate: dateStr,
+        positions: ubicacionesDisponibles,
+        inventario: inventarioAcumulado,
+        arribos: arribosDia
+      });
     }
 
     return NextResponse.json({
-        config: { capacidadTotal, consumoDiario },
-        inventarioBase,
-        proyeccion,
-        saturadoEn: proyeccion.findIndex(p => p.positions < 7)
+      config: { capacidadTotal, consumoDiario },
+      inventarioBase,
+      proyeccion,
+      saturadoEn: proyeccion.findIndex(p => p.positions < 7),
+      depositos: depositosFiltrados // send deposit details to frontend
     });
 
   } catch (err: any) {

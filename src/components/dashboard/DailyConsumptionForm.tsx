@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { Settings2, Loader2 } from "lucide-react";
 
-export function DailyConsumptionForm({ initialRate = 4, onUpdate, isLoading }: { initialRate?: number, onUpdate: () => void, isLoading?: boolean }) {
+export function DailyConsumptionForm({ initialRate = 4, onUpdate, isLoading, sede = 'ANTIOQUIA' }: { initialRate?: number, onUpdate: () => void, isLoading?: boolean, sede?: string }) {
   const [rate, setRate] = useState(initialRate);
   const [saving, setSaving] = useState(false);
 
@@ -13,10 +13,10 @@ export function DailyConsumptionForm({ initialRate = 4, onUpdate, isLoading }: {
   const handleUpdate = async () => {
     setSaving(true);
     try {
-      const res = await fetch('/api/config', {
+      const res = await fetch('/api/consumo', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ consumo_base_diario: rate })
+        body: JSON.stringify({ consumo_base_diario: rate, sede })
       });
       if (res.ok) onUpdate();
     } catch (e) {
