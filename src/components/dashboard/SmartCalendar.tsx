@@ -171,10 +171,13 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
   const dailyTotals = useMemo(() => {
     const totals: Record<string, number> = {};
     data.forEach(item => {
-      totals[item.fecha_eta] = (totals[item.fecha_eta] || 0) + (item.cantidad || 0);
+      const itemDest = item.destino?.toUpperCase();
+      if (filterDestino === 'ALL' || itemDest === filterDestino) {
+        totals[item.fecha_eta] = (totals[item.fecha_eta] || 0) + (item.cantidad || 0);
+      }
     });
     return totals;
-  }, [data]);
+  }, [data, filterDestino]);
 
   // Daily discharge load per destino (para alertas por depósito)
   const dailyDischargeByDestino = useMemo(() => {
