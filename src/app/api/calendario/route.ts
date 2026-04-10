@@ -10,7 +10,7 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from('arribos_calendario')
-      .select('*')
+      .select('*, arribos_citas(hora_cita)')
       .eq('sede', sede)
       .order('created_at', { ascending: true });
 
@@ -42,12 +42,47 @@ export async function POST(request: Request) {
 
     // Ejecutar inserts / updates
     if (upserts && Array.isArray(upserts) && upserts.length > 0) {
+      // Separar citas del payload de arribos
+      const arribosToUpsert = upserts.map((u: any) => {
+        const { citas, ...resto } = u;
+        return resto;
+      });
+
       const { data, error } = await supabase
         .from('arribos_calendario')
-        .upsert(upserts, { onConflict: 'id' })
+        .upsert(arribosToUpsert, { onConflict: 'id' })
         .select();
 
       if (error) throw new Error(error.message);
+
+      // Ahora procesamos las citas iterando los upserts originales
+      // Eliminar citas viejas y volver a insertarlas para asegurar sincronía
+      if (data) {
+        const upsertedIds = data.map((d: any) => d.id);
+        
+        // Solo borrar las citas de los arribos que se actualizaron para reemplazarlas
+        await supabase.from('arribos_citas').delete().in('arribo_id', upsertedIds);
+        
+        const citasToInsert: any[] = [];
+        
+        // Emparejar por el index o por el ID en caso de ser actualización
+        upserts.forEach((u: any, idx: number) => {
+          const arribo_id = data[idx].id;
+          if (u.citas && Array.isArray(u.citas)) {
+             u.citas.forEach((hora: string) => {
+                 if(hora) {
+                    citasToInsert.push({ arribo_id, hora_cita: hora });
+                 }
+             });
+          }
+        });
+
+        if (citasToInsert.length > 0) {
+            const { error: citasErr } = await supabase.from('arribos_citas').insert(citasToInsert);
+            if(citasErr) console.error("Error guardando citas:", citasErr);
+        }
+      }
+
       return NextResponse.json({ success: true, data });
     }
 

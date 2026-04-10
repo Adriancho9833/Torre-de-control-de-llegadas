@@ -54,7 +54,7 @@ export async function GET(request: Request) {
     if (arribos) {
       arribos.forEach(row => {
         const d = row.fecha_eta;
-        arriboPorFecha[d] = (arriboPorFecha[d] || 0) + (row.cantidad || 0);
+        arriboPorFecha[d] = (arriboPorFecha[d] || 0) + parseFloat(row.cantidad?.toString() || '0');
       });
     }
 
@@ -68,16 +68,23 @@ export async function GET(request: Request) {
       const arribosDia = arriboPorFecha[dateStr] || 0;
 
       if (i > 0) {
-        inventarioAcumulado = inventarioAcumulado + arribosDia - consumoDiario;
+        const dayOfWeek = currentDate.getDay(); // 0: Sun, 1: Mon, ..., 6: Sat
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const consumoHoy = isWeekend ? 0 : consumoDiario;
+        
+        inventarioAcumulado = inventarioAcumulado + arribosDia - consumoHoy;
       } else {
         // Day 0: start from current real inventory
-        inventarioAcumulado = inventarioBase;
+        inventarioAcumulado = inventarioBase + arribosDia; // Current inventory reflects the start of the day, add today's arrivals
       }
 
       if (inventarioAcumulado < 0) inventarioAcumulado = 0;
       if (inventarioAcumulado > capacidadTotal) inventarioAcumulado = capacidadTotal;
 
-      const ubicacionesDisponibles = capacidadTotal - inventarioAcumulado;
+      // Fix precision issues from decimals
+      inventarioAcumulado = parseFloat(inventarioAcumulado.toFixed(2));
+
+      const ubicacionesDisponibles = parseFloat((capacidadTotal - inventarioAcumulado).toFixed(2));
 
       proyeccion.push({
         date: format(currentDate, 'dd/MM'),

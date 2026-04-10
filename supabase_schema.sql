@@ -62,7 +62,7 @@ CREATE TABLE public.arribos_calendario (
     impo VARCHAR(100) NOT NULL,
     modelo VARCHAR(150),
     destino VARCHAR(100),
-    cantidad INT DEFAULT 0,
+    cantidad NUMERIC(6, 2) DEFAULT 0,
     observaciones TEXT,
     sede VARCHAR(50) NOT NULL DEFAULT 'ANTIOQUIA',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -71,6 +71,16 @@ ALTER TABLE public.arribos_calendario ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "allow_all_arribos_calendario" ON public.arribos_calendario FOR ALL USING (true) WITH CHECK (true);
 CREATE INDEX idx_arribos_sede ON public.arribos_calendario(sede);
 CREATE INDEX idx_arribos_sede_fecha ON public.arribos_calendario(sede, fecha_eta);
+
+-- Tabla para citas horarias individuales de cada arribo
+CREATE TABLE public.arribos_citas (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    arribo_id UUID REFERENCES public.arribos_calendario(id) ON DELETE CASCADE,
+    hora_cita TIME NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+ALTER TABLE public.arribos_citas ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow_all_arribos_citas" ON public.arribos_citas FOR ALL USING (true) WITH CHECK (true);
 
 -- Tabla para excepciones del calendario logístico (días feriados / capacidad override)
 CREATE TABLE public.calendario_operativo (
