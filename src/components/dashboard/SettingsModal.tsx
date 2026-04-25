@@ -20,6 +20,14 @@ interface Destino {
   inventario_actual: number;
 }
 
+interface ConfigSede {
+  id?: string;
+  sede: string;
+  capacidad_total?: number;
+  consumo_base_diario?: number;
+  constante_traslados: number;
+}
+
 type Tab = "modelos" | "depositos";
 
 interface SettingsModalProps {
@@ -32,6 +40,7 @@ export function SettingsModal({ sede, onClose, onSaved }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>("depositos");
   const [modelos, setModelos] = useState<Modelo[]>([]);
   const [destinos, setDestinos] = useState<Destino[]>([]);
+  const [configSede, setConfigSede] = useState<ConfigSede | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [pendingModeloDeletes, setPendingModeloDeletes] = useState<string[]>([]);
@@ -44,6 +53,7 @@ export function SettingsModal({ sede, onClose, onSaved }: SettingsModalProps) {
         const json = await res.json();
         setModelos(json.modelos || []);
         setDestinos(json.destinos || []);
+        setConfigSede(json.configSede || { sede, constante_traslados: 0 });
       }
     } catch (e) {
       console.error(e);
@@ -111,7 +121,14 @@ export function SettingsModal({ sede, onClose, onSaved }: SettingsModalProps) {
       const res = await fetch("/api/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modelos: modelosClean, destinos: destinosClean }),
+        body: JSON.stringify({ 
+          modelos: modelosClean, 
+          destinos: destinosClean,
+          configSede: configSede ? {
+            ...configSede,
+            constante_traslados: parseFloat(String(configSede.constante_traslados)) || 0
+          } : undefined
+        }),
       });
 
       if (res.ok) {
@@ -175,6 +192,24 @@ export function SettingsModal({ sede, onClose, onSaved }: SettingsModalProps) {
               {/* TAB: DEPOSITOS */}
               {activeTab === "depositos" && (
                 <div>
+                  <div className="bg-white border rounded-xl p-4 mb-6 shadow-sm">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h4 className="font-bold text-gray-800 text-sm">Constante de Traslados (Lunes - Viernes)</h4>
+                        <p className="text-xs text-gray-500">Volumen diario adicional a proyectar para {sede}.</p>
+                      </div>
+                      <div className="w-32">
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="w-full border border-gray-300 rounded-lg p-2 text-center font-bold focus:ring-2 focus:ring-sunset-amber focus:outline-none"
+                          value={configSede?.constante_traslados || 0}
+                          onChange={(e) => setConfigSede(prev => prev ? { ...prev, constante_traslados: parseFloat(e.target.value) || 0 } : null)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Summary cards */}
                   <div className="grid grid-cols-3 gap-4 mb-6">
                     <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-center">

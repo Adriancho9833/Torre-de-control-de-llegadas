@@ -14,10 +14,21 @@ export async function GET(request: Request) {
       .select('*')
       .eq('sede', sede);
 
+    const { data: configSede } = await supabase
+      .from('configuracion_sedes')
+      .select('constante_traslados')
+      .eq('sede', sede)
+      .single();
+
     if (configError) throw configError;
     if (!depositosConfig || depositosConfig.length === 0) {
       return NextResponse.json({ error: 'No hay configuración de depósitos para esta sede.' }, { status: 404 });
     }
+    
+    const configConstante = parseFloat(configSede?.constante_traslados?.toString() || '0');
+    // Aplicar la constante de traslados global solo a PLANTA (y ALL)
+    const aplicarConstante = destino === 'ALL' || destino === 'PLANTA';
+    const constanteTraslados = aplicarConstante ? configConstante : 0;
 
     // Filter to relevant deposits
     const depositosFiltrados = destino === 'ALL'
@@ -39,7 +50,7 @@ export async function GET(request: Request) {
 
     let arrivalsQuery = supabase
       .from('arribos_calendario')
-      .select('fecha_eta, cantidad, destino')
+      .select('fecha_eta, cantidad, destino, categoria')
       .eq('sede', sede)
       .gte('fecha_eta', fechaInicioStr);
 
@@ -53,6 +64,9 @@ export async function GET(request: Request) {
     const arriboPorFecha: Record<string, number> = {};
     if (arribos) {
       arribos.forEach(row => {
+        // Ignorar conteo de traslados para evitar doble conteo
+        if (row.categoria === 'TRASLADO DE FABRICATO') return;
+
         const d = row.fecha_eta;
         arriboPorFecha[d] = (arriboPorFecha[d] || 0) + parseFloat(row.cantidad?.toString() || '0');
       });
@@ -71,8 +85,9 @@ export async function GET(request: Request) {
         const dayOfWeek = currentDate.getDay(); // 0: Sun, 1: Mon, ..., 6: Sat
         const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
         const consumoHoy = isWeekend ? 0 : consumoDiario;
+        const constanteHoy = isWeekend ? 0 : constanteTraslados;
         
-        inventarioAcumulado = inventarioAcumulado + arribosDia - consumoHoy;
+        inventarioAcumulado = inventarioAcumulado + arribosDia + constanteHoy - consumoHoy;
       } else {
         // Day 0: start from current real inventory
         inventarioAcumulado = inventarioBase + arribosDia; // Current inventory reflects the start of the day, add today's arrivals
@@ -96,7 +111,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      config: { capacidadTotal, consumoDiario },
+      config: { capacidadTotal, consumoDiario, constanteTraslados },
       inventarioBase,
       proyeccion,
       saturadoEn: proyeccion.findIndex(p => p.positions < 2),

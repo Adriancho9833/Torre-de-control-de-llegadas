@@ -83,6 +83,7 @@ export function CargueRapido({ sede, onSuccess, onClose }: CargueRapidoProps) {
       destino: r.destino,
       fecha_eta: r.fecha_eta,
       sede,
+      categoria: 'DE PUERTO',
       observaciones: 'Cargue masivo'
     }));
 

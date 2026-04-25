@@ -14,7 +14,7 @@ import {
   differenceInDays
 } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Search, Plus, Save, X, Trash2, AlertTriangle, Loader2, Download, Upload } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, Plus, Save, X, Trash2, AlertTriangle, Loader2, Download, Upload, Check } from 'lucide-react';
 import { DndContext, DragEndEvent, closestCenter, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { CargueRapido } from './CargueRapido';
@@ -29,6 +29,8 @@ interface ArriboRow {
   cantidad: number;
   observaciones: string;
   sede: string;
+  categoria?: string;
+  llegado?: boolean;
   citas?: string[]; // Array of times "HH:MM"
   arribos_citas?: { hora_cita: string }[]; // Raw from DB
   _isNew?: boolean;
@@ -64,13 +66,21 @@ const TIME_SLOTS = Array.from({ length: 23 }, (_, i) => {
   return `${h}:${m}`;
 });
 
+const CATEGORIAS = ['DE PUERTO', 'TRASLADO DE FABRICATO', 'TRASLADO DE ZF'];
+
+function formatModelName(name: string): string {
+  if (!name) return "";
+  const parts = name.split(" - ");
+  return parts.length > 1 ? parts[parts.length - 1].trim() : name.trim();
+}
+
 // ─── Color mapping per destino ────────────────────────────────────────────────
 function getDestinoStyle(destino: string): string {
   const d = destino?.toUpperCase();
   if (d === 'PLANTA')         return 'bg-emerald-100 text-emerald-800 border-emerald-300';
   if (d === 'FABRICATO')      return 'bg-blue-100 text-blue-800 border-blue-300';
   if (d === 'BODEGA EXTERNA') return 'bg-blue-100 text-blue-800 border-blue-300';
-  if (d === 'ROSENDAL')       return 'bg-teal-100 text-teal-800 border-teal-300';
+  if (d === 'ROSENDAL')       return 'bg-orange-100 text-orange-800 border-orange-300';
   if (d === 'OTROS')          return 'bg-purple-100 text-purple-800 border-purple-300';
   return 'bg-gray-100 text-gray-700 border-gray-300';
 }
@@ -80,13 +90,13 @@ function getFilterActiveStyle(destino: string): string {
   if (d === 'PLANTA')         return 'bg-emerald-100 text-emerald-700 shadow-sm';
   if (d === 'FABRICATO')      return 'bg-blue-100 text-blue-700 shadow-sm';
   if (d === 'BODEGA EXTERNA') return 'bg-blue-100 text-blue-700 shadow-sm';
-  if (d === 'ROSENDAL')       return 'bg-teal-100 text-teal-700 shadow-sm';
+  if (d === 'ROSENDAL')       return 'bg-orange-100 text-orange-700 shadow-sm';
   if (d === 'OTROS')          return 'bg-purple-100 text-purple-700 shadow-sm';
   return 'bg-white shadow-sm';
 }
 
 // ─── Draggable Arrival Item ──────────────────────────────────────────────────
-function DraggableArrival({ arribo, isHighlighted }: { arribo: ArriboRow; isHighlighted: boolean; }) {
+function DraggableArrival({ arribo, isHighlighted, onToggleLlegado }: { arribo: ArriboRow; isHighlighted: boolean; onToggleLlegado?: (id: string, currentVal: boolean) => void; }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: arribo.id || `temp-${arribo.impo}`,
     data: { arribo }
@@ -112,17 +122,34 @@ function DraggableArrival({ arribo, isHighlighted }: { arribo: ArriboRow; isHigh
       className={`
         text-[10px] border px-1.5 py-1 rounded truncate flex justify-between items-center cursor-grab hover:brightness-95
         ${badgeClass}
-        ${isHighlighted ? 'ring-2 ring-amber-400 ring-offset-1 font-extrabold shadow-[0_0_6px_1px_rgba(251,191,36,0.6)]' : ''}
+        ${isHighlighted ? 'ring-2 ring-red-500 ring-offset-1 font-extrabold shadow-[0_0_8px_2px_rgba(239,68,68,0.8)] text-red-950 bg-red-100 border-red-500' : ''}
       `}
     >
-      <span className="truncate mr-1">{citaHora ? `${citaHora} | ` : ''}{arribo.impo}</span>
+      <div className="flex items-center gap-1.5 truncate">
+        {arribo.id && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleLlegado?.(arribo.id!, !!arribo.llegado);
+            }}
+            className={`w-3.5 h-3.5 rounded border flex justify-center items-center shrink-0 transition-colors ${
+              arribo.llegado
+                ? 'bg-green-500 border-green-600 text-white'
+                : 'bg-white border-gray-400 opacity-60 hover:opacity-100'
+            }`}
+          >
+            {arribo.llegado && <Check size={10} strokeWidth={4} />}
+          </button>
+        )}
+        <span className="truncate mr-1">{citaHora ? `${citaHora} | ` : ''}{arribo.impo} - {formatModelName(arribo.modelo)}</span>
+      </div>
       <span className="font-bold bg-white/70 px-1 rounded shrink-0">{arribo.cantidad}</span>
     </div>
   );
 }
 
 // ─── Droppable Calendar Day ──────────────────────────────────────────────────
-function DroppableDay({ dateStr, isCurrentMonth, hasHighlight, isInventoryCritical, isDischargeOverflow, isTodayDay, dayArrivals, searchImpo, openModal, dayNum }: any) {
+function DroppableDay({ dateStr, isCurrentMonth, hasHighlight, isInventoryCritical, isDischargeOverflow, isTodayDay, dayArrivals, searchImpo, openModal, dayNum, onToggleLlegado }: any) {
   const { isOver, setNodeRef } = useDroppable({
     id: dateStr,
     data: { date: dateStr }
@@ -160,8 +187,11 @@ function DroppableDay({ dateStr, isCurrentMonth, hasHighlight, isInventoryCritic
 
       <div className="flex flex-col gap-1 overflow-y-auto no-scrollbar pb-1 z-10" onClick={e => e.stopPropagation()}>
         {dayArrivals.map((arribo: ArriboRow, i: number) => {
-          const matchedSearch = searchImpo.length > 1 && arribo.impo.toLowerCase().includes(searchImpo.toLowerCase());
-          return <DraggableArrival key={arribo.id || i} arribo={arribo} isHighlighted={matchedSearch} />;
+          const reducedModelName = formatModelName(arribo.modelo).toLowerCase();
+          const impoLower = arribo.impo.toLowerCase();
+          const searchLower = searchImpo.toLowerCase();
+          const matchedSearch = searchImpo.length > 1 && (reducedModelName.includes(searchLower) || impoLower.includes(searchLower));
+          return <DraggableArrival key={arribo.id || i} arribo={arribo} isHighlighted={matchedSearch} onToggleLlegado={onToggleLlegado} />;
         })}
       </div>
       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/[0.02] transition pointer-events-none rounded" />
@@ -175,12 +205,13 @@ interface SmartCalendarProps {
   capacidadTotal: number;
   consumoDiario: number;
   inventarioBase: number;
+  constanteTraslados: number;
   onSuccess: () => void;
   filterDestino: string;
   onFilterChange: (d: string) => void;
 }
 
-export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioBase, onSuccess, filterDestino, onFilterChange }: SmartCalendarProps) {
+export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioBase, constanteTraslados, onSuccess, filterDestino, onFilterChange }: SmartCalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [data, setData] = useState<ArriboRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -268,7 +299,8 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
             cantidad: sourceArribo.cantidad,
             observaciones: sourceArribo.observaciones,
             citas: sourceArribo.arribos_citas?.map(c => c.hora_cita), // Preserve citas
-            sede: sourceArribo.sede
+            sede: sourceArribo.sede,
+            categoria: sourceArribo.categoria
         };
 
         const res = await fetch('/api/calendario', {
@@ -283,6 +315,41 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
         // Revert on error
         await fetchMonthData(currentDate); 
       }
+    }
+  };
+
+  const handleToggleLlegado = async (id: string, currentVal: boolean) => {
+    // Optimistic UI update
+    const newVal = !currentVal;
+    setData(prev => prev.map(a => a.id === id ? { ...a, llegado: newVal } : a));
+
+    try {
+      // Find the item to only send the upsert for that specific id
+      const itemToUpdate = data.find(a => a.id === id);
+      if (!itemToUpdate) return;
+      const payload = {
+        id: itemToUpdate.id,
+        fecha_eta: itemToUpdate.fecha_eta,
+        impo: itemToUpdate.impo,
+        modelo: itemToUpdate.modelo,
+        destino: itemToUpdate.destino,
+        cantidad: itemToUpdate.cantidad,
+        observaciones: itemToUpdate.observaciones,
+        sede: itemToUpdate.sede,
+        categoria: itemToUpdate.categoria,
+        llegado: newVal
+      };
+
+      const res = await fetch('/api/calendario', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upserts: [payload], deletes: [] })
+      });
+      if (!res.ok) throw new Error("Failed to toggle llegado");
+    } catch (e) {
+      console.error(e);
+      // Revert if error
+      await fetchMonthData(currentDate);
     }
   };
 
@@ -338,6 +405,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
   const dailyTotals = useMemo(() => {
     const totals: Record<string, number> = {};
     data.forEach(item => {
+      if (item.categoria === 'TRASLADO DE FABRICATO') return;
       const itemDest = item.destino?.toUpperCase();
       if (filterDestino === 'ALL' || itemDest === filterDestino) {
         totals[item.fecha_eta] = (totals[item.fecha_eta] || 0) + (item.cantidad || 0);
@@ -389,9 +457,10 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
       const dayOfWeek = d.getDay();
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
       const consumoAplicar = isWeekend ? 0 : consumoDiario;
+      const constanteAplicar = isWeekend ? 0 : constanteTraslados;
 
       if (diff > 0) {
-        runningInv = runningInv + arrivalsDia - consumoAplicar;
+        runningInv = runningInv + arrivalsDia + constanteAplicar - consumoAplicar;
       } else if (diff === 0) {
         runningInv = inventarioBase + arrivalsDia;
       }
@@ -445,6 +514,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
         impo: '',
         modelo: modelos[0]?.modelo || '',
         destino: defaultDestino,
+        categoria: 'DE PUERTO',
         cantidad: 0.5,
         citas: [''],
         observaciones: '',
@@ -575,7 +645,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
               <input
                 type="text"
-                placeholder="Buscar IMPO..."
+                placeholder="Buscar IMPO o Modelo..."
                 value={searchImpo}
                 onChange={(e) => setSearchImpo(e.target.value)}
                 className="pl-9 pr-4 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sunset-amber w-full sm:w-auto"
@@ -609,7 +679,10 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
                     return true;
                   });
 
-                  const hasHighlight = searchImpo.length > 1 && dayArrivals.some(a => a.impo.toLowerCase().includes(searchImpo.toLowerCase()));
+                  const hasHighlight = searchImpo.length > 1 && dayArrivals.some(a => {
+                    const searchLower = searchImpo.toLowerCase();
+                    return formatModelName(a.modelo).toLowerCase().includes(searchLower) || a.impo.toLowerCase().includes(searchLower);
+                  });
                   const projState = columnProjections[dateStr];
                   const isInventoryCritical = projState === 'CRITICAL';
                   const isDischargeOverflow = dischargeOverflowDates.has(dateStr);
@@ -629,6 +702,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
                       searchImpo={searchImpo}
                       openModal={openModal}
                       dayNum={dayNum}
+                      onToggleLlegado={handleToggleLlegado}
                     />
                   );
                 })}
@@ -698,7 +772,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
                         <div key={row.id || idx} className={`border rounded-xl p-4 transition ${exceeded ? 'bg-red-50/40 border-red-200' : 'bg-white border-gray-200 hover:shadow-md'}`}>
                           <div className="flex flex-wrap md:flex-nowrap gap-3 items-end">
                             {/* IMPO */}
-                            <div className="w-full md:w-1/6">
+                            <div className="w-full md:w-[12%]">
                               <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">IMPO</label>
                               <input
                                 type="text"
@@ -708,8 +782,21 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
                                 placeholder="8930"
                               />
                             </div>
+                            {/* CATEGORIA */}
+                            <div className="w-full md:w-[15%]">
+                              <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Categoría</label>
+                              <select
+                                className="w-full border border-gray-300 p-2 text-sm rounded focus:ring-2 focus:ring-sunset-amber focus:outline-none bg-white font-semibold"
+                                value={row.categoria || 'DE PUERTO'}
+                                onChange={e => updateModalRow(idx, 'categoria', e.target.value)}
+                              >
+                                {CATEGORIAS.map(c => (
+                                  <option key={c} value={c}>{c}</option>
+                                ))}
+                              </select>
+                            </div>
                             {/* MODELO - Made wider */}
-                            <div className="w-full md:w-1/4">
+                            <div className="w-full md:w-[20%]">
                               <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Modelo</label>
                               <select
                                 className="w-full border border-gray-300 p-2 text-sm rounded focus:ring-2 focus:ring-sunset-amber focus:outline-none bg-white font-mono"
@@ -723,7 +810,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
                               </select>
                             </div>
                             {/* CANTIDAD */}
-                            <div className="w-full md:w-[12%]">
+                            <div className="w-full md:w-[8%]">
                               <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Cant.</label>
                               <input
                                 type="number"
@@ -735,7 +822,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
                               />
                             </div>
                             {/* DESTINO */}
-                            <div className="w-full md:w-[15%]">
+                            <div className="w-full md:w-[14%]">
                               <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Destino</label>
                               <select
                                 className="w-full border border-gray-300 p-2 text-sm rounded focus:ring-2 focus:ring-sunset-amber focus:outline-none bg-white font-semibold"

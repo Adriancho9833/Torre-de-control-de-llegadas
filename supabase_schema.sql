@@ -9,6 +9,7 @@ CREATE TABLE public.configuracion_sedes (
     sede VARCHAR(50) NOT NULL UNIQUE,
     capacidad_total INT NOT NULL DEFAULT 41,
     consumo_base_diario INT NOT NULL DEFAULT 4,
+    constante_traslados DECIMAL(6, 2) NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 ALTER TABLE public.configuracion_sedes ENABLE ROW LEVEL SECURITY;
@@ -65,6 +66,8 @@ CREATE TABLE public.arribos_calendario (
     cantidad NUMERIC(6, 2) DEFAULT 0,
     observaciones TEXT,
     sede VARCHAR(50) NOT NULL DEFAULT 'ANTIOQUIA',
+    categoria VARCHAR(50) NOT NULL DEFAULT 'DE PUERTO' CHECK (categoria IN ('DE PUERTO', 'TRASLADO DE FABRICATO', 'TRASLADO DE ZF')),
+    llegado BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 ALTER TABLE public.arribos_calendario ENABLE ROW LEVEL SECURITY;

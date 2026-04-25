@@ -5,7 +5,7 @@ import { AutonomyIndicator } from "@/components/dashboard/AutonomyIndicator";
 import { ProjectionGraph } from "@/components/dashboard/ProjectionGraph";
 import { SmartCalendar } from "@/components/dashboard/SmartCalendar";
 import { SettingsModal } from "@/components/dashboard/SettingsModal";
-import { ShieldCheck, Settings2, MapPin, Filter } from "lucide-react";
+import { ShieldCheck, Settings2, MapPin, Filter, Forklift, Container } from "lucide-react";
 
 type Sede = "ANTIOQUIA" | "CARTAGENA";
 
@@ -34,7 +34,7 @@ export default function Dashboard() {
   const [showSettings, setShowSettings] = useState(false);
 
   const [data, setData] = useState<{
-    config: { capacidadTotal: number; consumoDiario: number } | null;
+    config: { capacidadTotal: number; consumoDiario: number; constanteTraslados: number } | null;
     inventarioBase: number;
     proyeccion: any[];
     saturadoEn: number;
@@ -90,11 +90,14 @@ export default function Dashboard() {
         <header className="flex items-center justify-between pb-6 border-b border-gray-200/60 mt-4 md:mt-0">
           <div>
             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-graphite-gray flex items-center gap-3">
-              <ShieldCheck className="text-sunset-amber" size={38} />
+              <div className="flex -space-x-1">
+                <Forklift className="text-sunset-amber" size={36} />
+                <Container className="text-green-600/90" size={28} style={{ marginTop: 'auto' }} />
+              </div>
               SGCR
             </h1>
             <p className="text-sm opacity-70 mt-1 ml-1 font-medium">
-              Sistema de Gestión de Capacidad de Recibo
+              Sistema de gestión de llegada de contenedores
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -217,6 +220,7 @@ export default function Dashboard() {
               sede={sede}
               capacidadTotal={data.config?.capacidadTotal ?? 0}
               consumoDiario={data.config?.consumoDiario ?? 0}
+              constanteTraslados={data.config?.constanteTraslados ?? 0}
               inventarioBase={data.inventarioBase}
               onSuccess={fetchProjection}
               filterDestino={filterDestino}
