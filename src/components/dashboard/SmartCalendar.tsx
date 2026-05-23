@@ -14,7 +14,7 @@ import {
   differenceInDays
 } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Search, Plus, Save, X, Trash2, AlertTriangle, Loader2, Download, Upload, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, Plus, Save, X, Trash2, AlertTriangle, Loader2, Download, Upload, Check, Ship, Truck } from 'lucide-react';
 import { DndContext, DragEndEvent, closestCenter, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { CargueRapido } from './CargueRapido';
@@ -217,6 +217,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
   const [loading, setLoading] = useState(false);
   const [modelos, setModelos] = useState<Modelo[]>([]);
   const [destinosCapacidad, setDestinosCapacidad] = useState<DestinoCapacidad[]>([]);
+  const [filterCategoria, setFilterCategoria] = useState<'ALL' | 'PUERTO' | 'TRASLADO'>('ALL');
 
   // Modals / Overlays state
   const [showCargueRapido, setShowCargueRapido] = useState(false);
@@ -608,7 +609,25 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap justify-end">
-            <div className="flex gap-2">
+            <div className="flex gap-2 bg-gray-100 rounded-lg p-1">
+               <button
+                 onClick={() => setFilterCategoria(prev => prev === 'PUERTO' ? 'ALL' : 'PUERTO')}
+                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-md transition duration-200 ${filterCategoria === 'PUERTO' ? 'bg-orange-500 text-white shadow-md border border-orange-600 scale-105' : 'bg-orange-50 text-orange-600 border border-orange-200 hover:bg-orange-100 hover:border-orange-300 shadow-sm'}`}
+                 title="Ver solo Puerto"
+               >
+                 <Ship size={14} className={filterCategoria === 'PUERTO' ? 'text-white' : 'text-orange-500'} />
+                 <span className="hidden sm:inline">De Puerto</span>
+               </button>
+               <button
+                 onClick={() => setFilterCategoria(prev => prev === 'TRASLADO' ? 'ALL' : 'TRASLADO')}
+                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-md transition duration-200 ${filterCategoria === 'TRASLADO' ? 'bg-indigo-600 text-white shadow-md border border-indigo-700 scale-105' : 'bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 shadow-sm'}`}
+                 title="Ver solo Traslados"
+               >
+                 <Truck size={14} className={filterCategoria === 'TRASLADO' ? 'text-white' : 'text-indigo-500'} />
+                 <span className="hidden sm:inline">Traslados</span>
+               </button>
+            </div>
+            <div className="flex gap-2 ml-1">
                <button 
                   onClick={() => setShowCargueRapido(true)} 
                   className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-md bg-white border shadow-sm text-green-700 hover:bg-green-50 transition"
@@ -676,6 +695,13 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
                   const dayArrivals = data.filter(item => {
                     if (item.fecha_eta !== dateStr) return false;
                     if (filterDestino !== 'ALL' && item.destino?.toUpperCase() !== filterDestino) return false;
+                    
+                    if (filterCategoria !== 'ALL') {
+                      const isTraslado = item.categoria?.toUpperCase().startsWith('TRASLADO');
+                      if (filterCategoria === 'PUERTO' && isTraslado) return false;
+                      if (filterCategoria === 'TRASLADO' && !isTraslado) return false;
+                    }
+                    
                     return true;
                   });
 
