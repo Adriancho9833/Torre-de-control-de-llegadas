@@ -7,7 +7,7 @@ export function ProjectionGraph({ data, isLoading }: { data: any[], isLoading?: 
     <div className="bg-white rounded-xl p-6 shadow-md border border-gray-100 h-[450px] flex flex-col">
       <div className="flex items-center gap-2 mb-6">
         <TrendingUp className="text-sunset-amber" size={24} />
-        <h2 className="text-xl font-bold text-charcoal-black">Proyección de Capacidad (25 Días)</h2>
+        <h2 className="text-xl font-bold text-charcoal-black">Proyección de Capacidad (30 Días)</h2>
       </div>
       
       {isLoading ? (

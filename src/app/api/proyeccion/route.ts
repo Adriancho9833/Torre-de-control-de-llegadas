@@ -6,7 +6,8 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const sede = searchParams.get('sede') || 'ANTIOQUIA';
-    const destino = searchParams.get('destino') || 'ALL'; // 'ALL' or specific deposit name
+    const destinoParam = searchParams.get('destino') || 'ALL'; // 'ALL' or specific deposit name(s) separated by comma
+    const destinos = destinoParam === 'ALL' ? [] : destinoParam.split(',').map(d => d.trim().toUpperCase());
 
     // 1. Get all deposit configurations for this sede
     const { data: depositosConfig, error: configError } = await supabase
@@ -27,16 +28,16 @@ export async function GET(request: Request) {
     
     const configConstante = parseFloat(configSede?.constante_traslados?.toString() || '0');
     // Aplicar la constante de traslados global solo a PLANTA (y ALL)
-    const aplicarConstante = destino === 'ALL' || destino === 'PLANTA';
+    const aplicarConstante = destinos.length === 0 || destinos.includes('PLANTA');
     const constanteTraslados = aplicarConstante ? configConstante : 0;
 
     // Filter to relevant deposits
-    const depositosFiltrados = destino === 'ALL'
+    const depositosFiltrados = destinos.length === 0
       ? depositosConfig
-      : depositosConfig.filter(d => d.destino.toUpperCase() === destino.toUpperCase());
+      : depositosConfig.filter(d => destinos.includes(d.destino.toUpperCase()));
 
     if (depositosFiltrados.length === 0) {
-      return NextResponse.json({ error: `Depósito '${destino}' no encontrado.` }, { status: 404 });
+      return NextResponse.json({ error: `Depósitos no encontrados.` }, { status: 404 });
     }
 
     // Aggregate config values (for ALL: sum capacities, sum consumos, sum inventarios)
@@ -54,8 +55,8 @@ export async function GET(request: Request) {
       .eq('sede', sede)
       .gte('fecha_eta', fechaInicioStr);
 
-    if (destino !== 'ALL') {
-      arrivalsQuery = arrivalsQuery.ilike('destino', destino);
+    if (destinos.length > 0) {
+      arrivalsQuery = arrivalsQuery.in('destino', destinos);
     }
 
     const { data: arribos } = await arrivalsQuery;
@@ -72,11 +73,11 @@ export async function GET(request: Request) {
       });
     }
 
-    // 3. Calculate 25-day projection
+    // 3. Calculate 30-day projection
     const proyeccion = [];
     let inventarioAcumulado = inventarioBase;
 
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 30; i++) {
       const currentDate = addDays(HOY, i);
       const dateStr = format(currentDate, 'yyyy-MM-dd');
       const arribosDia = arriboPorFecha[dateStr] || 0;

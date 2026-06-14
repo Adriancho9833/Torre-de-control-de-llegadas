@@ -207,8 +207,8 @@ interface SmartCalendarProps {
   inventarioBase: number;
   constanteTraslados: number;
   onSuccess: () => void;
-  filterDestino: string;
-  onFilterChange: (d: string) => void;
+  filterDestino: string[];
+  onFilterChange: (d: string[]) => void;
 }
 
 export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioBase, constanteTraslados, onSuccess, filterDestino, onFilterChange }: SmartCalendarProps) {
@@ -407,8 +407,8 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
     const totals: Record<string, number> = {};
     data.forEach(item => {
       if (item.categoria === 'TRASLADO DE FABRICATO') return;
-      const itemDest = item.destino?.toUpperCase();
-      if (filterDestino === 'ALL' || itemDest === filterDestino) {
+      const itemDest = item.destino?.toUpperCase() || '';
+      if (filterDestino.length === 0 || filterDestino.includes(itemDest)) {
         totals[item.fecha_eta] = (totals[item.fecha_eta] || 0) + (item.cantidad || 0);
       }
     });
@@ -644,20 +644,29 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
 
             <div className="flex bg-gray-200 rounded-lg p-1 gap-0.5 flex-wrap">
               <button
-                onClick={() => onFilterChange('ALL')}
-                className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${filterDestino === 'ALL' ? 'bg-white shadow-sm' : 'text-gray-500'}`}
+                onClick={() => onFilterChange([])}
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${filterDestino.length === 0 ? 'bg-white shadow-sm' : 'text-gray-500'}`}
               >
                 Todos
               </button>
-              {sedeConfig.destinos.map(dest => (
-                <button
-                  key={dest}
-                  onClick={() => onFilterChange(dest)}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${filterDestino === dest ? getFilterActiveStyle(dest) : 'text-gray-500'}`}
-                >
-                  {dest.charAt(0) + dest.slice(1).toLowerCase()}
-                </button>
-              ))}
+              {sedeConfig.destinos.map(dest => {
+                const isSelected = filterDestino.includes(dest);
+                return (
+                  <button
+                    key={dest}
+                    onClick={() => {
+                      if (isSelected) {
+                        onFilterChange(filterDestino.filter(d => d !== dest));
+                      } else {
+                        onFilterChange([...filterDestino, dest]);
+                      }
+                    }}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${isSelected ? getFilterActiveStyle(dest) : 'text-gray-500'}`}
+                  >
+                    {dest.charAt(0) + dest.slice(1).toLowerCase()}
+                  </button>
+                );
+              })}
             </div>
 
             <div className="relative">
@@ -694,7 +703,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
 
                   const dayArrivals = data.filter(item => {
                     if (item.fecha_eta !== dateStr) return false;
-                    if (filterDestino !== 'ALL' && item.destino?.toUpperCase() !== filterDestino) return false;
+                    if (filterDestino.length > 0 && !filterDestino.includes(item.destino?.toUpperCase() || '')) return false;
                     
                     if (filterCategoria !== 'ALL') {
                       const isTraslado = item.categoria?.toUpperCase().startsWith('TRASLADO');
@@ -766,7 +775,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
                         <span>{dest}:</span>
                         <span className="font-mono">{load.toFixed(1)}</span>
                         {limite !== null && limite !== undefined && (
-                          <span className="opacity-60">/ {limite} pts</span>
+                          <span className="opacity-60">/ {limite} horas</span>
                         )}
                       </div>
                     );

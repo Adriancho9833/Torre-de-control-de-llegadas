@@ -236,7 +236,7 @@ export function SettingsModal({ sede, onClose, onSaved }: SettingsModalProps) {
                   </div>
 
                   <p className="text-sm text-gray-500 mb-4">
-                    Configura la capacidad máxima, inventario actual y consumo diario de cada depósito de <strong>{sede}</strong>. El límite de descargue es la máxima carga de coeficientes por día.
+                    Configura la capacidad máxima, inventario actual y consumo diario de cada depósito de <strong>{sede}</strong>. El límite de descargue es la máxima suma de horas por día.
                   </p>
 
                   <div className="space-y-4">
@@ -291,7 +291,7 @@ export function SettingsModal({ sede, onClose, onSaved }: SettingsModalProps) {
                               />
                             </div>
                             <div>
-                              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Límite Descargue</label>
+                              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Límite Descargue (horas)</label>
                               <input
                                 type="number" min="0" step="0.5"
                                 value={d.limite_puntos ?? ""}

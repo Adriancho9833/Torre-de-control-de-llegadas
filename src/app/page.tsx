@@ -30,7 +30,7 @@ const SEDE_DESTINOS: Record<Sede, string[]> = {
 
 export default function Dashboard() {
   const [sede, setSede] = useState<Sede>("ANTIOQUIA");
-  const [filterDestino, setFilterDestino] = useState<string>("ALL");
+  const [filterDestino, setFilterDestino] = useState<string[]>([]);
   const [showSettings, setShowSettings] = useState(false);
 
   const [data, setData] = useState<{
@@ -49,7 +49,7 @@ export default function Dashboard() {
   const fetchProjection = useCallback(async () => {
     setLoading(true);
     try {
-      const destinoParam = filterDestino === "ALL" ? "ALL" : filterDestino;
+      const destinoParam = filterDestino.length === 0 ? "ALL" : filterDestino.join(',');
       const res = await fetch(`/api/proyeccion?sede=${sede}&destino=${destinoParam}`);
       if (res.ok) {
         const json = await res.json();
@@ -67,7 +67,7 @@ export default function Dashboard() {
 
   // Reset filter when sede changes
   useEffect(() => {
-    setFilterDestino("ALL");
+    setFilterDestino([]);
   }, [sede]);
 
   const availableToday =
@@ -78,9 +78,9 @@ export default function Dashboard() {
 
   // Label for current filter
   const filterLabel =
-    filterDestino === "ALL"
+    filterDestino.length === 0
       ? "Todos los depósitos"
-      : filterDestino.charAt(0) + filterDestino.slice(1).toLowerCase();
+      : filterDestino.map(d => d.charAt(0) + d.slice(1).toLowerCase()).join(', ');
 
   return (
     <div className="min-h-screen bg-soft-snow text-charcoal-black p-4 md:p-8 font-sans">
@@ -160,32 +160,40 @@ export default function Dashboard() {
           </div>
           <div className="flex bg-gray-100 rounded-xl p-1 gap-0.5 flex-wrap">
             <button
-              onClick={() => setFilterDestino("ALL")}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${filterDestino === "ALL" ? "bg-white shadow-sm text-gray-800" : "text-gray-500 hover:text-gray-700"}`}
+              onClick={() => setFilterDestino([])}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${filterDestino.length === 0 ? "bg-white shadow-sm text-gray-800" : "text-gray-500 hover:text-gray-700"}`}
             >
               Todos
             </button>
-            {destinos.map((dest) => (
-              <button
-                key={dest}
-                onClick={() => setFilterDestino(dest)}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${filterDestino === dest ? getFilterActiveStyle(dest) : "text-gray-500 hover:text-gray-700"}`}
-              >
-                {dest.charAt(0) + dest.slice(1).toLowerCase()}
-              </button>
-            ))}
+            {destinos.map((dest) => {
+              const isSelected = filterDestino.includes(dest);
+              return (
+                <button
+                  key={dest}
+                  onClick={() => {
+                    setFilterDestino(prev => {
+                      if (prev.includes(dest)) return prev.filter(d => d !== dest);
+                      return [...prev, dest];
+                    });
+                  }}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${isSelected ? getFilterActiveStyle(dest) : "text-gray-500 hover:text-gray-700"}`}
+                >
+                  {dest.charAt(0) + dest.slice(1).toLowerCase()}
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {/* Filter context label */}
-        {filterDestino !== "ALL" && (
+        {filterDestino.length > 0 && (
           <div className="flex items-center gap-2 -mt-4">
             <span className="text-xs font-semibold text-gray-400">Mostrando proyección para:</span>
-            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${getFilterBadgeStyle(filterDestino)}`}>
+            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${filterDestino.length === 1 ? getFilterBadgeStyle(filterDestino[0]) : "bg-purple-100 text-purple-700"}`}>
               {filterLabel}
             </span>
             <button
-              onClick={() => setFilterDestino("ALL")}
+              onClick={() => setFilterDestino([])}
               className="text-xs text-gray-400 hover:text-gray-600 underline transition"
             >
               Ver todos
