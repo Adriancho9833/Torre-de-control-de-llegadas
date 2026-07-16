@@ -11,7 +11,8 @@ import {
   addDays,
   isSameMonth,
   isSameDay,
-  differenceInDays
+  differenceInDays,
+  startOfDay
 } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Search, Plus, Save, X, Trash2, AlertTriangle, Loader2, Download, Upload, Check, Ship, Truck } from 'lucide-react';
@@ -45,6 +46,9 @@ interface Modelo {
 interface DestinoCapacidad {
   destino: string;
   limite_puntos: number | null;
+  capacidad_total: number;
+  consumo_base_diario: number;
+  inventario_actual: number;
 }
 
 // ─── Per-sede configuration ───────────────────────────────────────────────────
@@ -149,7 +153,7 @@ function DraggableArrival({ arribo, isHighlighted, onToggleLlegado }: { arribo: 
 }
 
 // ─── Droppable Calendar Day ──────────────────────────────────────────────────
-function DroppableDay({ dateStr, isCurrentMonth, hasHighlight, isInventoryCritical, isDischargeOverflow, isTodayDay, dayArrivals, searchImpo, openModal, dayNum, onToggleLlegado }: any) {
+function DroppableDay({ dateStr, isCurrentMonth, hasHighlight, isInventoryCritical, isDischargeOverflow, isTodayDay, dayArrivals, searchImpo, openModal, dayNum, onToggleLlegado, warehouseProj }: any) {
   const { isOver, setNodeRef } = useDroppable({
     id: dateStr,
     data: { date: dateStr }
@@ -184,6 +188,24 @@ function DroppableDay({ dateStr, isCurrentMonth, hasHighlight, isInventoryCritic
           )}
         </div>
       </div>
+
+      {/* Badges por bodega (Requerimiento 2) */}
+      {warehouseProj && (
+        <div className="flex flex-wrap gap-1 mb-1">
+          {Object.entries(warehouseProj).map(([dest, available]: [string, any]) => {
+            const shortName = dest.substring(0, 2);
+            let color = "bg-green-100 text-green-700 border-green-200";
+            if (available < 2) color = "bg-red-100 text-red-700 border-red-200 font-bold";
+            else if (available === 2) color = "bg-yellow-100 text-yellow-700 border-yellow-200";
+            
+            return (
+              <div key={dest} title={`${dest}: ${available} espacios`} className={`text-[9px] px-1 py-0.5 rounded border ${color} leading-none`}>
+                {shortName}: {available}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <div className="flex flex-col gap-1 overflow-y-auto no-scrollbar pb-1 z-10" onClick={e => e.stopPropagation()}>
         {dayArrivals.map((arribo: ArriboRow, i: number) => {
@@ -268,6 +290,12 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
     fetchMonthData(currentDate);
     fetchConfig();
   }, [currentDate, fetchMonthData, fetchConfig]);
+
+  // Re-fetch config when parent props change (e.g. after settings save)
+  // This ensures warehouseProjections badges stay in sync with the projection graph
+  useEffect(() => {
+    fetchConfig();
+  }, [consumoDiario, capacidadTotal, constanteTraslados, inventarioBase]);
 
   // ─── Drag and Drop Handlers ─────────────────────────────────────────────
   const sensors = useSensors(
@@ -419,14 +447,16 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
   const dailyDischargeByDestino = useMemo(() => {
     const result: Record<string, Record<string, number>> = {};
     data.forEach(item => {
+      const dest = item.destino?.toUpperCase() || 'OTROS';
+      if (filterDestino.length > 0 && !filterDestino.includes(dest)) return;
+
       const coef = coeficienteMap[item.modelo?.toUpperCase()] ?? 1.0;
       const load = (item.cantidad || 0) * coef;
       if (!result[item.fecha_eta]) result[item.fecha_eta] = {};
-      const dest = item.destino?.toUpperCase() || 'OTROS';
       result[item.fecha_eta][dest] = (result[item.fecha_eta][dest] || 0) + load;
     });
     return result;
-  }, [data, coeficienteMap]);
+  }, [data, coeficienteMap, filterDestino]);
 
   // Set of dates where at least one destino exceeds its limit
   const dischargeOverflowDates = useMemo(() => {
@@ -449,16 +479,19 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
     const proj: Record<string, 'CRITICAL' | 'TIGHT' | 'OK'> = {};
     let runningInv = inventarioBase;
     const flatDays = rows.flat();
+    const startOfTodayDate = startOfDay(today);
+
+    const aplicarConstante = filterDestino.length === 0 || filterDestino.includes('PLANTA');
 
     flatDays.forEach(d => {
       const ds = format(d, 'yyyy-MM-dd');
-      const diff = differenceInDays(d, today);
+      const diff = differenceInDays(d, startOfTodayDate);
       const arrivalsDia = dailyTotals[ds] || 0;
       
       const dayOfWeek = d.getDay();
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
       const consumoAplicar = isWeekend ? 0 : consumoDiario;
-      const constanteAplicar = isWeekend ? 0 : constanteTraslados;
+      const constanteAplicar = isWeekend ? 0 : (aplicarConstante ? constanteTraslados : 0);
 
       if (diff > 0) {
         runningInv = runningInv + arrivalsDia + constanteAplicar - consumoAplicar;
@@ -467,7 +500,10 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
       }
       
       if (runningInv < 0) runningInv = 0;
-      const available = capacidadTotal - runningInv;
+      // Eliminamos el tope máximo para reflejar el sobrecupo
+      runningInv = parseFloat(runningInv.toFixed(2));
+      
+      const available = parseFloat((capacidadTotal - runningInv).toFixed(2));
       if (available < 2) {
         proj[ds] = 'CRITICAL';
       } else if (available <= 5) {
@@ -477,7 +513,55 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
       }
     });
     return proj;
-  }, [dailyTotals, rows, inventarioBase, capacidadTotal, consumoDiario, today]);
+  }, [dailyTotals, rows, inventarioBase, capacidadTotal, consumoDiario, today, constanteTraslados, filterDestino]);
+
+  // Proyecciones individuales por bodega para los badges del calendario
+  const warehouseProjections = useMemo(() => {
+    const proj: Record<string, Record<string, number>> = {};
+    const runningInv: Record<string, number> = {};
+    const destinosActivos = destinosCapacidad.filter(d => filterDestino.length === 0 || filterDestino.includes(d.destino.toUpperCase()));
+
+    destinosActivos.forEach(d => {
+      runningInv[d.destino.toUpperCase()] = d.inventario_actual || 0;
+    });
+
+    const flatDays = rows.flat();
+    const startOfTodayDate = startOfDay(today);
+
+    flatDays.forEach(d => {
+      const ds = format(d, 'yyyy-MM-dd');
+      const diff = differenceInDays(d, startOfTodayDate);
+      proj[ds] = {};
+      
+      destinosActivos.forEach(dest => {
+        const destName = dest.destino.toUpperCase();
+        let arrivalsDia = 0;
+        data.forEach(item => {
+           if (item.fecha_eta === ds && item.categoria !== 'TRASLADO DE FABRICATO' && item.destino?.toUpperCase() === destName) {
+              arrivalsDia += (item.cantidad || 0);
+           }
+        });
+
+        const dayOfWeek = d.getDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const consumoHoy = isWeekend ? 0 : (dest.consumo_base_diario || 0);
+        const constanteHoy = isWeekend ? 0 : (destName === 'PLANTA' ? constanteTraslados : 0);
+
+        if (diff > 0) {
+          runningInv[destName] = runningInv[destName] + arrivalsDia + constanteHoy - consumoHoy;
+        } else if (diff === 0) {
+          runningInv[destName] = (dest.inventario_actual || 0) + arrivalsDia;
+        }
+
+        if (runningInv[destName] < 0) runningInv[destName] = 0;
+        // Eliminamos el tope máximo
+        
+        const available = parseFloat(((dest.capacidad_total || 0) - runningInv[destName]).toFixed(2));
+        proj[ds][destName] = available;
+      });
+    });
+    return proj;
+  }, [data, rows, destinosCapacidad, today, constanteTraslados, filterDestino]);
 
   // ─── Navigation ──────────────────────────────────────────────────────────
   const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
@@ -738,6 +822,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
                       openModal={openModal}
                       dayNum={dayNum}
                       onToggleLlegado={handleToggleLlegado}
+                      warehouseProj={warehouseProjections[dateStr]}
                     />
                   );
                 })}
@@ -994,7 +1079,8 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
                         <table className="w-full text-sm text-left border">
                             <thead className="bg-gray-100 text-gray-600 uppercase text-xs">
                                 <tr>
-                                    <th className="p-2 border">Fecha</th>
+                                    <th className="p-2 border">Fecha Inicial</th>
+                                    <th className="p-2 border">Fecha ETA (Actual)</th>
                                     <th className="p-2 border">Hora Cita</th>
                                     <th className="p-2 border">IMPO</th>
                                     <th className="p-2 border">Modelo</th>
@@ -1005,14 +1091,15 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
                             </thead>
                             <tbody>
                                 {reportData.length === 0 ? (
-                                    <tr><td colSpan={7} className="p-4 text-center text-gray-500">No hay arribos en el rango seleccionado.</td></tr>
+                                    <tr><td colSpan={8} className="p-4 text-center text-gray-500">No hay arribos en el rango seleccionado.</td></tr>
                                 ) : (
                                     reportData.map((row) => {
                                         const citasArray = row.arribos_citas?.map((c: any) => c.hora_cita.substring(0,5)) || [];
                                         const horasText = citasArray.join(' | ') || 'Sin Asignar';
                                         return (
                                             <tr key={row.id} className="hover:bg-gray-50 border-b">
-                                                <td className="p-2 border text-gray-600 font-mono whitespace-nowrap">{row.fecha_eta}</td>
+                                                <td className="p-2 border text-gray-500 font-mono whitespace-nowrap">{row.fecha_prometida_inicial || row.fecha_eta}</td>
+                                                <td className="p-2 border text-gray-600 font-bold font-mono whitespace-nowrap">{row.fecha_eta}</td>
                                                 <td className="p-2 border font-mono">{horasText}</td>
                                                 <td className="p-2 border font-bold text-gray-700">{row.impo}</td>
                                                 <td className="p-2 border text-xs">{row.modelo}</td>

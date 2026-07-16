@@ -222,13 +222,13 @@ export default function Dashboard() {
         </div>
 
         {/* Calendar - filter is controlled here, passed down */}
-        <div className="pb-12">
-          {!loading && (
+        <div className={`pb-12 transition-opacity duration-300 ${loading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+          {data.config && (
             <SmartCalendar
               sede={sede}
-              capacidadTotal={data.config?.capacidadTotal ?? 0}
-              consumoDiario={data.config?.consumoDiario ?? 0}
-              constanteTraslados={data.config?.constanteTraslados ?? 0}
+              capacidadTotal={data.config.capacidadTotal}
+              consumoDiario={data.config.consumoDiario}
+              constanteTraslados={data.config.constanteTraslados}
               inventarioBase={data.inventarioBase}
               onSuccess={fetchProjection}
               filterDestino={filterDestino}

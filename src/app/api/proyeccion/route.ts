@@ -95,7 +95,7 @@ export async function GET(request: Request) {
       }
 
       if (inventarioAcumulado < 0) inventarioAcumulado = 0;
-      if (inventarioAcumulado > capacidadTotal) inventarioAcumulado = capacidadTotal;
+      // Eliminamos el tope máximo para reflejar el sobrecupo real (inventario > capacidad)
 
       // Fix precision issues from decimals
       inventarioAcumulado = parseFloat(inventarioAcumulado.toFixed(2));

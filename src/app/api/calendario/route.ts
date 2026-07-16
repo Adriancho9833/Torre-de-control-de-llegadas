@@ -42,10 +42,44 @@ export async function POST(request: Request) {
 
     // Ejecutar inserts / updates
     if (upserts && Array.isArray(upserts) && upserts.length > 0) {
-      // Separar citas del payload de arribos
+      
+      const upsertIds = upserts.map((u: any) => u.id).filter(Boolean);
+      let existingMap = new Map();
+      
+      if (upsertIds.length > 0) {
+        const { data: existingRecords } = await supabase
+          .from('arribos_calendario')
+          .select('id, fecha_eta, fecha_prometida_inicial, cantidad_cambios_fecha')
+          .in('id', upsertIds);
+          
+        if (existingRecords) {
+          existingRecords.forEach(r => existingMap.set(r.id, r));
+        }
+      }
+
+      // Separar citas y calcular tracking de fechas
       const arribosToUpsert = upserts.map((u: any) => {
         const { citas, ...resto } = u;
-        return resto;
+        
+        const existing = existingMap.get(u.id);
+        if (existing) {
+          const changedDate = existing.fecha_eta !== u.fecha_eta;
+          return {
+             ...resto,
+             fecha_prometida_inicial: existing.fecha_prometida_inicial || existing.fecha_eta,
+             ...(changedDate && { fecha_ultima_actualizacion: new Date().toISOString() }),
+             cantidad_cambios_fecha: changedDate 
+                 ? (existing.cantidad_cambios_fecha || 0) + 1 
+                 : (existing.cantidad_cambios_fecha || 0)
+          };
+        } else {
+          // Registro nuevo
+          return {
+             ...resto,
+             fecha_prometida_inicial: u.fecha_eta,
+             cantidad_cambios_fecha: 0
+          };
+        }
       });
 
       const { data, error } = await supabase
