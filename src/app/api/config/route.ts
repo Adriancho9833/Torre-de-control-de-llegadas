@@ -8,7 +8,7 @@ export async function GET(request: Request) {
     const sede = searchParams.get('sede') || 'ANTIOQUIA';
 
     const [modelosRes, destinosRes, configSedeRes] = await Promise.all([
-      supabase.from('modelos_coeficientes').select('*').order('modelo', { ascending: true }),
+      supabase.from('modelos_coeficientes').select('*').eq('sede', sede).order('modelo', { ascending: true }),
       supabase.from('destinos_capacidad').select('*').eq('sede', sede).order('destino', { ascending: true }),
       supabase.from('configuracion_sedes').select('*').eq('sede', sede).single(),
     ]);

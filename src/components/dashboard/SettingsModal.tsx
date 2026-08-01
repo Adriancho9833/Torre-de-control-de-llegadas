@@ -69,7 +69,7 @@ export function SettingsModal({ sede, onClose, onSaved }: SettingsModalProps) {
   const addModelo = () => {
     setModelos([
       ...modelos,
-      { id: crypto.randomUUID(), modelo: "", coeficiente: 1.0, descripcion: "", _isNew: true },
+      { id: crypto.randomUUID(), modelo: "", coeficiente: 1.0, descripcion: "", sede: sedeActiva, _isNew: true },
     ]);
   };
 

@@ -52,14 +52,16 @@ interface DestinoCapacidad {
 }
 
 // ─── Per-sede configuration ───────────────────────────────────────────────────
-const SEDE_CONFIG: Record<string, { destinos: string[]; label: string }> = {
+const SEDE_CONFIG: Record<string, { destinos: string[]; categorias: string[]; label: string }> = {
   ANTIOQUIA: {
     label: 'Antioquia',
-    destinos: ['PLANTA', 'FABRICATO', 'ROSENDAL', 'OTROS'],
+    destinos: ['PLANTA', 'FABRICATO', 'ROSENDAL', 'OPERADOR'],
+    categorias: ['DE PUERTO', 'TRASLADO DE FABRICATO', 'TRASLADO DE ZF']
   },
   CARTAGENA: {
     label: 'Cartagena',
-    destinos: ['PLANTA', 'BODEGA EXTERNA', 'OTROS'],
+    destinos: ['PLANTA', 'BODEGA EXTERNA', 'OPERADOR'],
+    categorias: ['DE PUERTO', 'TRASLADO DE EXTERNA', 'TRASLADO DE ZF']
   },
 };
 
@@ -70,7 +72,7 @@ const TIME_SLOTS = Array.from({ length: 23 }, (_, i) => {
   return `${h}:${m}`;
 });
 
-const CATEGORIAS = ['DE PUERTO', 'TRASLADO DE FABRICATO', 'TRASLADO DE ZF'];
+const CATEGORIAS = ['DE PUERTO', 'TRASLADO DE FABRICATO', 'TRASLADO DE EXTERNA', 'TRASLADO DE ZF'];
 
 function formatModelName(name: string): string {
   if (!name) return "";
@@ -85,7 +87,7 @@ function getDestinoStyle(destino: string): string {
   if (d === 'FABRICATO')      return 'bg-blue-100 text-blue-800 border-blue-300';
   if (d === 'BODEGA EXTERNA') return 'bg-blue-100 text-blue-800 border-blue-300';
   if (d === 'ROSENDAL')       return 'bg-orange-100 text-orange-800 border-orange-300';
-  if (d === 'OTROS')          return 'bg-purple-100 text-purple-800 border-purple-300';
+  if (d === 'OPERADOR')       return 'bg-purple-100 text-purple-800 border-purple-300';
   return 'bg-gray-100 text-gray-700 border-gray-300';
 }
 
@@ -95,7 +97,7 @@ function getFilterActiveStyle(destino: string): string {
   if (d === 'FABRICATO')      return 'bg-blue-100 text-blue-700 shadow-sm';
   if (d === 'BODEGA EXTERNA') return 'bg-blue-100 text-blue-700 shadow-sm';
   if (d === 'ROSENDAL')       return 'bg-orange-100 text-orange-700 shadow-sm';
-  if (d === 'OTROS')          return 'bg-purple-100 text-purple-700 shadow-sm';
+  if (d === 'OPERADOR')       return 'bg-purple-100 text-purple-700 shadow-sm';
   return 'bg-white shadow-sm';
 }
 
@@ -171,8 +173,7 @@ function DroppableDay({ dateStr, isCurrentMonth, hasHighlight, isInventoryCritic
         ${isCurrentMonth ? 'bg-white' : 'bg-gray-50/70 text-gray-400'}
         ${hasHighlight ? 'bg-amber-50 hover:bg-amber-100/70' : 'hover:bg-gray-50'}
         ${isOver ? 'ring-2 ring-inset ring-sunset-amber bg-amber-50/40' : ''}
-        ${isInventoryCritical ? 'shadow-[inset_0_0_0_2px_#ef4444]' : ''}
-        ${isDischargeOverflow && !isInventoryCritical ? 'shadow-[inset_0_0_0_2px_#f97316]' : ''}
+        ${isDischargeOverflow ? 'shadow-[inset_0_0_0_2px_#f97316]' : ''}
       `}
     >
       <div className="flex justify-between items-start mb-1">
@@ -389,7 +390,8 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
         const res = await fetch(`/api/calendario?start=${exportStart}&end=${exportEnd}&sede=${sede}`);
         if(res.ok) {
             const json = await res.json();
-            setReportData(json);
+            const sorted = json.sort((a: any, b: any) => new Date(a.fecha_eta).getTime() - new Date(b.fecha_eta).getTime());
+            setReportData(sorted);
         } else {
             alert('Error generando reporte.');
         }
@@ -434,7 +436,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
   const dailyTotals = useMemo(() => {
     const totals: Record<string, number> = {};
     data.forEach(item => {
-      if (item.categoria === 'TRASLADO DE FABRICATO') return;
+      if (item.categoria?.startsWith('TRASLADO')) return;
       const itemDest = item.destino?.toUpperCase() || '';
       if (filterDestino.length === 0 || filterDestino.includes(itemDest)) {
         totals[item.fecha_eta] = (totals[item.fecha_eta] || 0) + (item.cantidad || 0);
@@ -447,7 +449,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
   const dailyDischargeByDestino = useMemo(() => {
     const result: Record<string, Record<string, number>> = {};
     data.forEach(item => {
-      const dest = item.destino?.toUpperCase() || 'OTROS';
+      const dest = item.destino?.toUpperCase() || 'OPERADOR';
       if (filterDestino.length > 0 && !filterDestino.includes(dest)) return;
 
       const coef = coeficienteMap[item.modelo?.toUpperCase()] ?? 1.0;
@@ -537,7 +539,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
         const destName = dest.destino.toUpperCase();
         let arrivalsDia = 0;
         data.forEach(item => {
-           if (item.fecha_eta === ds && item.categoria !== 'TRASLADO DE FABRICATO' && item.destino?.toUpperCase() === destName) {
+           if (item.fecha_eta === ds && !item.categoria?.startsWith('TRASLADO') && item.destino?.toUpperCase() === destName) {
               arrivalsDia += (item.cantidad || 0);
            }
         });
@@ -574,7 +576,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
     const dayData = data.filter(r => r.fecha_eta === dateStr).map(r => ({
         ...r,
         // Map arribos_citas properly for editing
-        citas: r.arribos_citas?.map(c => c.hora_cita.substring(0, 5)) || Array(Math.max(1, Math.ceil(r.cantidad))).fill('')
+        citas: r.arribos_citas?.map(c => c.hora_cita.substring(0, 5)) || Array(Math.max(1, Math.ceil(r.cantidad))).fill('08:00')
     }));
     
     setModalRows(dayData);
@@ -601,7 +603,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
         destino: defaultDestino,
         categoria: 'DE PUERTO',
         cantidad: 0.5,
-        citas: [''],
+        citas: ['08:00'],
         observaciones: '',
         sede,
         _isNew: true
@@ -617,7 +619,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
       const newQty = parseFloat(value) || 0;
       const citaSlots = Math.max(1, Math.ceil(newQty));
       const currentCitas = newRows[index].citas || [];
-      const newCitas = Array(citaSlots).fill('').map((_, i) => currentCitas[i] || '');
+      const newCitas = Array(citaSlots).fill('08:00').map((_, i) => currentCitas[i] || '08:00');
       
       newRows[index] = { ...newRows[index], cantidad: newQty, citas: newCitas };
     } else {
@@ -670,7 +672,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
     modalRows.forEach(row => {
       const coef = coeficienteMap[row.modelo?.toUpperCase()] ?? 1.0;
       const load = (row.cantidad || 0) * coef;
-      const dest = row.destino?.toUpperCase() || 'OTROS';
+      const dest = row.destino?.toUpperCase() || 'OPERADOR';
       result[dest] = (result[dest] || 0) + load;
     });
     return result;
@@ -881,7 +883,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
                     {modalRows.map((row, idx) => {
                       const coef = coeficienteMap[row.modelo?.toUpperCase()] ?? 1.0;
                       const load = (row.cantidad || 0) * coef;
-                      const dest = row.destino?.toUpperCase() || 'OTROS';
+                      const dest = row.destino?.toUpperCase() || 'OPERADOR';
                       const limite = limiteMap[dest];
                       const destLoad = modalDischargeByDestino[dest] || 0;
                       const exceeded = limite !== null && limite !== undefined && destLoad > limite;
@@ -910,7 +912,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
                                 value={row.categoria || 'DE PUERTO'}
                                 onChange={e => updateModalRow(idx, 'categoria', e.target.value)}
                               >
-                                {CATEGORIAS.map(c => (
+                                {(SEDE_CONFIG[sede]?.categorias || CATEGORIAS).map(c => (
                                   <option key={c} value={c}>{c}</option>
                                 ))}
                               </select>

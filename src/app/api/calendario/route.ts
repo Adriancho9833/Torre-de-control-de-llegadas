@@ -99,10 +99,10 @@ export async function POST(request: Request) {
         
         const citasToInsert: any[] = [];
         
-        // Emparejar por el index o por el ID en caso de ser actualización
-        upserts.forEach((u: any, idx: number) => {
-          const arribo_id = data[idx].id;
-          if (u.citas && Array.isArray(u.citas)) {
+        // Usar directamente el u.id porque el frontend genera los UUIDs o ya existen
+        upserts.forEach((u: any) => {
+          const arribo_id = u.id;
+          if (arribo_id && u.citas && Array.isArray(u.citas)) {
              u.citas.forEach((hora: string) => {
                  if(hora) {
                     citasToInsert.push({ arribo_id, hora_cita: hora });
