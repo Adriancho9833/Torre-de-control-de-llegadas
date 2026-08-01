@@ -7,6 +7,7 @@ interface Modelo {
   modelo: string;
   coeficiente: number;
   descripcion: string;
+  sede?: string;
   _isNew?: boolean;
 }
 
