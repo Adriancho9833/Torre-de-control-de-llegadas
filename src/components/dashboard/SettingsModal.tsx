@@ -137,7 +137,9 @@ export function SettingsModal({ sede, onClose, onSaved }: SettingsModalProps) {
         onSaved();
         onClose();
       } else {
-        alert("Error al guardar la configuración.");
+        const errorData = await res.json().catch(() => ({}));
+        console.error("API Error details:", errorData);
+        alert(`Error al guardar la configuración: ${errorData.error || "Desconocido"}`);
       }
     } catch (e) {
       console.error(e);
