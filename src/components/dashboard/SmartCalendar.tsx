@@ -262,8 +262,15 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
     setLoading(true);
     const monthStart = startOfMonth(date);
     const monthEnd = endOfMonth(date);
-    const startDate = format(startOfWeek(monthStart, { weekStartsOn: 1 }), 'yyyy-MM-dd');
-    const endDate = format(endOfWeek(monthEnd, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+    const startDateDate = startOfWeek(monthStart, { weekStartsOn: 1 });
+    const endDateDate = endOfWeek(monthEnd, { weekStartsOn: 1 });
+    
+    const todayDate = startOfDay(new Date());
+    const fetchStartDate = startDateDate > todayDate ? todayDate : startDateDate;
+    const fetchEndDate = endDateDate < todayDate ? todayDate : endDateDate;
+
+    const startDate = format(fetchStartDate, 'yyyy-MM-dd');
+    const endDate = format(fetchEndDate, 'yyyy-MM-dd');
     try {
       const res = await fetch(`/api/calendario?start=${startDate}&end=${endDate}&sede=${sede}`);
       if (res.ok) {
@@ -482,15 +489,17 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
     let runningInv = inventarioBase;
     const flatDays = rows.flat();
     const startOfTodayDate = startOfDay(today);
+    const lastDay = flatDays.length > 0 ? flatDays[flatDays.length - 1] : startOfTodayDate;
 
     const aplicarConstante = filterDestino.length === 0 || filterDestino.includes('PLANTA');
 
-    flatDays.forEach(d => {
-      const ds = format(d, 'yyyy-MM-dd');
-      const diff = differenceInDays(d, startOfTodayDate);
+    let current = startOfTodayDate;
+    while (current <= lastDay) {
+      const ds = format(current, 'yyyy-MM-dd');
+      const diff = differenceInDays(current, startOfTodayDate);
       const arrivalsDia = dailyTotals[ds] || 0;
       
-      const dayOfWeek = d.getDay();
+      const dayOfWeek = current.getDay();
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
       const consumoAplicar = isWeekend ? 0 : consumoDiario;
       const constanteAplicar = isWeekend ? 0 : (aplicarConstante ? constanteTraslados : 0);
@@ -513,7 +522,22 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
       } else {
         proj[ds] = 'OK';
       }
+      current = addDays(current, 1);
+    }
+    
+    // Fallback para días en el pasado (se calcula basándose en el inventario actual sin retroceder acumulados)
+    flatDays.forEach(d => {
+      const ds = format(d, 'yyyy-MM-dd');
+      if (differenceInDays(d, startOfTodayDate) < 0) {
+        const arrivalsDia = dailyTotals[ds] || 0;
+        const pastInv = inventarioBase + arrivalsDia;
+        const available = parseFloat((capacidadTotal - pastInv).toFixed(2));
+        if (available < 2) proj[ds] = 'CRITICAL';
+        else if (available <= 5) proj[ds] = 'TIGHT';
+        else proj[ds] = 'OK';
+      }
     });
+
     return proj;
   }, [dailyTotals, rows, inventarioBase, capacidadTotal, consumoDiario, today, constanteTraslados, filterDestino]);
 
@@ -529,10 +553,12 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
 
     const flatDays = rows.flat();
     const startOfTodayDate = startOfDay(today);
+    const lastDay = flatDays.length > 0 ? flatDays[flatDays.length - 1] : startOfTodayDate;
 
-    flatDays.forEach(d => {
-      const ds = format(d, 'yyyy-MM-dd');
-      const diff = differenceInDays(d, startOfTodayDate);
+    let current = startOfTodayDate;
+    while (current <= lastDay) {
+      const ds = format(current, 'yyyy-MM-dd');
+      const diff = differenceInDays(current, startOfTodayDate);
       proj[ds] = {};
       
       destinosActivos.forEach(dest => {
@@ -544,7 +570,7 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
            }
         });
 
-        const dayOfWeek = d.getDay();
+        const dayOfWeek = current.getDay();
         const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
         const consumoHoy = isWeekend ? 0 : (dest.consumo_base_diario || 0);
         const constanteHoy = isWeekend ? 0 : (destName === 'PLANTA' ? constanteTraslados : 0);
@@ -556,12 +582,32 @@ export function SmartCalendar({ sede, capacidadTotal, consumoDiario, inventarioB
         }
 
         if (runningInv[destName] < 0) runningInv[destName] = 0;
-        // Eliminamos el tope máximo
         
         const available = parseFloat(((dest.capacidad_total || 0) - runningInv[destName]).toFixed(2));
         proj[ds][destName] = available;
       });
+      current = addDays(current, 1);
+    }
+    
+    // Fallback para días en el pasado
+    flatDays.forEach(d => {
+      const ds = format(d, 'yyyy-MM-dd');
+      if (differenceInDays(d, startOfTodayDate) < 0) {
+        proj[ds] = {};
+        destinosActivos.forEach(dest => {
+          const destName = dest.destino.toUpperCase();
+          let arrivalsDia = 0;
+          data.forEach(item => {
+             if (item.fecha_eta === ds && !item.categoria?.startsWith('TRASLADO') && item.destino?.toUpperCase() === destName) {
+                arrivalsDia += (item.cantidad || 0);
+             }
+          });
+          const pastInv = (dest.inventario_actual || 0) + arrivalsDia;
+          proj[ds][destName] = parseFloat(((dest.capacidad_total || 0) - pastInv).toFixed(2));
+        });
+      }
     });
+
     return proj;
   }, [data, rows, destinosCapacidad, today, constanteTraslados, filterDestino]);
 
